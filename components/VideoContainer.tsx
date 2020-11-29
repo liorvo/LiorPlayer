@@ -13,7 +13,7 @@ const VideoContainer = () => {
     });
   }, []);
   const addToList = (url) => {
-    socket.emit("addToList", url);
+    socket.emit("addToPlayList", url);
   };
   const onItemRemove = (index) => {
     socket.emit("removeFromPlaylist", index);

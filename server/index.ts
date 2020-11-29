@@ -57,7 +57,7 @@ nextApp.prepare().then(() => {
     readPlaylist((playlist) => {
       socket.emit("sendPlaylist", playlist);
     });
-    socket.on("addToList", (url) => {
+    socket.on("addToPlayList", (url) => {
       readPlaylist((playlist) => {
         const newPlaylist = [...playlist, url];
         writePlaylist(newPlaylist, (err) => {
