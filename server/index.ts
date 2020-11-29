@@ -3,10 +3,11 @@ const express = require("express");
 const { parse } = require("url");
 const next = require("next");
 const dev = process.env.NODE_ENV !== "production";
-const app = next({ dev });
-const handle = app.getRequestHandler();
+const nextApp = next({ dev });
+const nextHandler = nextApp.getRequestHandler();
 const fs = require("fs");
 const bodyParser = require("body-parser");
+const socketIo = require("socket.io");
 
 function readPlaylist(callback) {
   fs.readFile("lib/playlist.json", function (err, data) {
@@ -24,7 +25,7 @@ function readPlaylist(callback) {
   });
 }
 
-function writePlaylist(playlist) {
+function writePlaylist(playlist, callback) {
   fs.writeFile(
     "lib/playlist.json",
     JSON.stringify(playlist),
@@ -32,47 +33,53 @@ function writePlaylist(playlist) {
       if (err) {
         console.log(`error writing playlist ${result}`, err);
       }
+      if (callback) {
+        callback(err);
+      }
     }
   );
 }
 
-app.prepare().then(() => {
-  const server = express();
-  server.use(bodyParser.urlencoded({ extended: true }));
-  server.use(bodyParser.json());
-  server.get("/getPlaylist", (req, res) => {
-    readPlaylist((playlist) => {
-      res.send(playlist);
-    });
-    return;
+nextApp.prepare().then(() => {
+  const app = express();
+  app.use(bodyParser.urlencoded({ extended: true }));
+  app.use(bodyParser.json());
+  app.get("*", (req, res) => {
+    return nextHandler(req, res);
   });
-  server.post("/addToPlaylist", (req, res) => {
-    const { url } = req.body;
-    readPlaylist((playlist) => {
-      writePlaylist([...playlist, url]);
-    });
-    return;
-  });
-  server.post("/removeFromPlaylist", (req, res) => {
-    const { index, url } = req.body;
-    readPlaylist((playlist) => {
-      if (playlist[index] == url) {
-        // important check because clients can try to delete an item that as already been deleted by another client
-        writePlaylist([
-          ...playlist.slice(0, index),
-          ...playlist.slice(index + 1),
-        ]);
-      }
-    });
-    return;
-  });
-  server.get("*", (req, res) => {
-    const parsedUrl = parse(req.url, true);
-    const { pathname, query } = parsedUrl;
-    app.render(req, res, pathname, query);
-  });
-  createServer(server).listen(3000, (err) => {
+  const server = createServer(app);
+  const io = socketIo(server);
+  server.listen(3000, (err) => {
     if (err) throw err;
     console.log("> Ready on http://localhost:3000");
+  });
+  io.on("connection", (socket) => {
+    readPlaylist((playlist) => {
+      socket.emit("sendPlaylist", playlist);
+    });
+    socket.on("addToList", (url) => {
+      readPlaylist((playlist) => {
+        const newPlaylist = [...playlist, url];
+        writePlaylist(newPlaylist, (err) => {
+          if (!err) {
+            socket.emit("sendPlaylist", newPlaylist);
+          }
+        });
+      });
+    });
+    socket.on("removeFromPlaylist", (index) => {
+      readPlaylist((playlist) => {
+        const newPlaylist = [
+          ...playlist.slice(0, index),
+          ...playlist.slice(index + 1),
+        ];
+
+        writePlaylist(newPlaylist, (err) => {
+          if (!err) {
+            socket.emit("sendPlaylist", newPlaylist);
+          }
+        });
+      });
+    });
   });
 });

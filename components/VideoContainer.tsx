@@ -2,38 +2,21 @@ import { useState, useEffect } from "react";
 import VideoInput from "./VideoInput";
 import VideoList from "./VideoList";
 import ReactPlayer from "react-player";
+import openSocket from "socket.io-client";
+const socket = openSocket("http://localhost:3000");
 
 const VideoContainer = () => {
   const [videoList, setVideoList] = useState([]);
   useEffect(() => {
-    fetch("/getPlaylist") // in real apps we will use global state management and dispatch an action. then we will use useEffect on the playlist state that VideoContainer will get as prop and call setVideoList on it
-      .then((data) => data.json())
-      .then((playlist) => setVideoList(playlist))
-      .catch((err) => {
-        // log error to logger
-      });
+    socket.on("sendPlaylist", (playlist) => {
+      setVideoList(playlist);
+    });
   }, []);
   const addToList = (url) => {
-    fetch("/addToPlaylist", {
-      // as written above
-      method: "post",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ url }),
-    });
-    setVideoList([...videoList, url]);
+    socket.emit("addToList", url);
   };
   const onItemRemove = (index) => {
-    fetch("/removeFromPlaylist", {
-      // as written above
-      method: "post",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ index, url: videoList[index] }),
-    });
-    setVideoList(videoList.slice(index + 1));
+    socket.emit("removeFromPlaylist", index);
   };
   const onEnded = () => {
     onItemRemove(0);
